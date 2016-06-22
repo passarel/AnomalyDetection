@@ -60,11 +60,13 @@
 #' @seealso \code{\link{AnomalyDetectionVec}}
 #' @export
 #'
+
+#Changed signature in order to allow specification of the aggregator (mean, by default) and to allow the specification of desired granularity to aggregate data
 AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
                                alpha = 0.05, only_last = NULL, threshold = 'None',
                                e_value = FALSE, longterm = FALSE, piecewise_median_period_weeks = 2, plot = FALSE,
                                y_log = FALSE, xlabel = '', ylabel = 'count',
-                               title = NULL, verbose=FALSE, na.rm = FALSE){
+                               title = NULL, verbose=FALSE, na.rm = FALSE, aggregator = "mean", desired_gran = NULL){
 
   # Check for supported inputs types
   if(!is.data.frame(x)){
@@ -161,10 +163,30 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
     num_days_per_line <- 1
   }
 
-  # Aggregate data to minutely if secondly
-  if(gran == "sec"){
-    x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text="sum"))))
+  # Aggregate data to minutely if secondly -- 
+  # Fixed bug to keep proper granularity saved on 'gran' variable
+  if((gran == "sec") || (gran == "ms")){
+    x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text=aggregator))))
+	gran = "min"
   }
+  
+  # Allow for aggregate data in a different granularity than the one defined arbitrarily:
+  if (!is.null(desired_gran)){
+	if (desired_gran == "day"){
+	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d 00:00:00"), eval(parse(text=aggregator))))
+	  gran = "day"
+	}
+	if (desired_gran == "hr"){
+	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:00:00"), eval(parse(text=aggregator))))
+	  gran = "hr"
+	}
+	if (desired_gran == "min"){
+	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text=aggregator))))
+	  gran = "min"
+	}
+  }
+  
+  
 
   period = switch(gran,
                   min = 1440,
