@@ -69,6 +69,8 @@ detect_anoms <- function(data, k = 0.49, alpha = 0.05, num_obs_per_period = NULL
     }
 
     num_anoms <- 0L
+    
+    first_ares = c()
 
     # Compute test statistic until r=max_outliers values have been
     # removed from the sample.
@@ -91,6 +93,14 @@ detect_anoms <- function(data, k = 0.49, alpha = 0.05, num_obs_per_period = NULL
             break
 
         ares <- ares/data_sigma
+        
+        if (i == 1L){
+          if (posix_timestamp)
+            first_ares = data.frame(timestamp = as.character(data[[1L]]), anom_score = ares)
+          else
+            first_ares = ares
+        }
+        
         R <- max(ares)
 
         temp_max_idx <- which(ares == R)[1L]
@@ -119,5 +129,5 @@ detect_anoms <- function(data, k = 0.49, alpha = 0.05, num_obs_per_period = NULL
       R_idx = NULL
     }
       
-    return(list(anoms = R_idx, stl = data_decomp))
+    return(list(anoms = R_idx, stl = data_decomp, anomaly_score = first_ares))
 }

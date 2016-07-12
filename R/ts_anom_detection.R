@@ -1,3 +1,6 @@
+
+
+
 #' Anomaly Detection Using Seasonal Hybrid ESD Test
 #'
 #' A technique for detecting anomalies in seasonal univariate time series where the input is a
@@ -62,12 +65,16 @@
 #'
 
 #Changed signature in order to allow specification of the aggregator (mean, by default) and to allow the specification of desired granularity to aggregate data
+
 AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
                                alpha = 0.05, only_last = NULL, threshold = 'None',
                                e_value = FALSE, longterm = FALSE, piecewise_median_period_weeks = 2, plot = FALSE,
                                y_log = FALSE, xlabel = '', ylabel = 'count',
                                title = NULL, verbose=FALSE, na.rm = FALSE, aggregator = "mean", desired_gran = NULL){
 
+
+  
+  
   # Check for supported inputs types
   if(!is.data.frame(x)){
     stop("data must be a single data frame.")
@@ -163,31 +170,36 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
     num_days_per_line <- 1
   }
 
+  original_values = x
+  original_values$agg_timestamp = x[[1]]
+  
   # Aggregate data to minutely if secondly -- 
   # Fixed bug to keep proper granularity saved on 'gran' variable
   if((gran == "sec") || (gran == "ms")){
+    original_values$agg_timestamp = format(x[[1]], "%Y-%m-%d %H:%M")
     x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text=aggregator))))
-	gran = "min"
+	  gran = "min"
   }
   
   # Allow for aggregate data in a different granularity than the one defined arbitrarily:
   if (!is.null(desired_gran)){
-	if (desired_gran == "day"){
-	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d 00:00:00"), eval(parse(text=aggregator))))
-	  gran = "day"
-	}
-	if (desired_gran == "hr"){
-	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:00:00"), eval(parse(text=aggregator))))
-	  gran = "hr"
-	}
-	if (desired_gran == "min"){
-	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text=aggregator))))
-	  gran = "min"
-	}
+	  if (desired_gran == "day"){
+	    original_values$agg_timestamp = format(x[[1]], "%Y-%m-%d")
+  	  x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d 00:00:00"), eval(parse(text=aggregator))))
+	    gran = "day"
+	  }
+	  if (desired_gran == "hr"){
+	    original_values$agg_timestamp = format(x[[1]], "%Y-%m-%d %H")
+	    x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:00:00"), eval(parse(text=aggregator))))
+	    gran = "hr"
+	  }
+	  if (desired_gran == "min"){
+	    original_values$agg_timestamp = format(x[[1]], "%Y-%m-%d %H:%M")
+	    x <- format_timestamp(aggregate(x[2], format(x[1], "%Y-%m-%d %H:%M:00"), eval(parse(text=aggregator))))
+	    gran = "min"
+	  }
   }
   
-  
-
   period = switch(gran,
                   min = 1440,
                   hr = 24,
@@ -233,10 +245,11 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
     # If longterm is not enabled, then just overwrite all_data list with x as the only item
     all_data <- list(x)
   }
-
+  
   # Create empty data frames to store all anoms and seasonal+trend component from decomposition
   all_anoms <- data.frame(timestamp=numeric(0), count=numeric(0))
   seasonal_plus_trend <- data.frame(timestamp=numeric(0), count=numeric(0))
+  full_score <- data.frame(timestamp=numeric(0), anom_score=numeric(0))
 
   # Detect anomalies on all data (either entire data in one-pass, or in 2 week blocks if longterm=TRUE)
   for(i in 1:length(all_data)) {
@@ -253,8 +266,10 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
 
     # store decomposed components in local variable and overwrite s_h_esd_timestamps to contain only the anom timestamps
     data_decomp <- s_h_esd_timestamps$stl
+    anom_score <- s_h_esd_timestamps$anomaly_score    
     s_h_esd_timestamps <- s_h_esd_timestamps$anoms
 
+    
     # -- Step 3: Use detected anomaly timestamps to extract the actual anomalies (timestamp and value) from the data
     if(!is.null(s_h_esd_timestamps)){
       anoms <- subset(all_data[[i]], (all_data[[i]][[1]] %in% s_h_esd_timestamps))
@@ -280,6 +295,7 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
     }
     all_anoms <- rbind(all_anoms, anoms)
     seasonal_plus_trend <- rbind(seasonal_plus_trend, data_decomp)
+    full_score = rbind(full_score, anom_score)
   }
 
   # Cleanup potential duplicates
@@ -376,11 +392,13 @@ AnomalyDetectionTs <- function(x, max_anoms = 0.10, direction = 'pos',
   # Make sure we're still a valid POSIXlt datetime.
   # TODO: Make sure we keep original datetime format and timezone.
   anoms$timestamp <- as.POSIXlt(anoms$timestamp, tz="UTC")
+  output_score = merge(original_values, full_score, by.x = "agg_timestamp", by.y = "timestamp")  
 
   # Lastly, return anoms and optionally the plot if requested by the user
   if(plot){
-    return (list(anoms = anoms, plot = xgraph))
+    return (list(anoms = anoms, plot = xgraph, anom_score = output_score))
   } else {
-    return (list(anoms = anoms, plot = plot.new()))
+    return (list(anoms = anoms, plot = plot.new(), anom_score = output_score))
   }
 }
+
